@@ -32,6 +32,7 @@
 unsigned long awakeTimeMs = 0;
 unsigned long lastMillis = 0;
 unsigned char prevPIRState = 0;
+
 CRGB spookLeds[numSpookLeds];
 
 void setup() {
@@ -50,17 +51,19 @@ void setup() {
 
   // Lighting Spook eyes just to show the µController is running
   FastLED.addLeds<WS2812, spookPin, GRB>(spookLeds, numSpookLeds);
-  for(int bright = 0; bright < 256; bright++) {
+  for(int loop = 0; loop < 4; loop++) {
+    uint8_t bright = 255;
     spookLeds[0] = CRGB(bright, bright, bright);
     spookLeds[1] = CRGB(bright, bright, bright);
     FastLED.show();
+    delay(40);
+
+    spookLeds[0] = CRGB(0, 0, 0);
+    spookLeds[1] = CRGB(0, 0, 0);
+    FastLED.show();  
     delay(20);
   }
-  delay(500);
-  spookLeds[0] = CRGB(0, 0, 0);
-  spookLeds[1] = CRGB(0, 0, 0);
-  FastLED.show();  
-
+  
   // Power to potential divider with LDR. Ensures no power used until we read it.
   pinMode(pwrLDR, OUTPUT);
   digitalWrite(pwrLDR, LOW);
@@ -94,7 +97,8 @@ void loop() {
   // Just blink LED/beep twice to show we're running. Note that after coming out of sleep
   // there is a deliberate small delay so we don't beep immediately in case it is light
   // when this should go back to sleep at once
-  greenBlink();
+  //greenBlink();
+  redGlow();
 
   // How dark is it?
   digitalWrite(pwrLDR, HIGH);
@@ -124,7 +128,7 @@ void loop() {
   // Is it light (> 400) then go to sleep at once
   // If it is dark AND it's been running for 5+ seconds AND PIR has not detected activity, go to sleep
   if (darkness > 400
-      || (millis() > awakeTimeMs + 5000
+      || (millis() > awakeTimeMs + 600
           && pirLevel == HIGH))
   {
     // Turn off the LDR power
@@ -187,10 +191,18 @@ void loop() {
 
     // Reset the awake Counter so we stay awake for a minimum amount of time (unless it is light)
     awakeTimeMs = millis();
+#ifdef DEBUG
+    Serial.print("awakeTimeMs = ");
+    Serial.println(awakeTimeMs);
+#endif
 
     // Reset beeper timer so we beep almost immediately on wakeup (if movement and dark)
     lastMillis = millis() - 200;
     previousDark = 0;
+#ifdef DEBUG
+    Serial.print("lastMilliss = ");
+    Serial.println(lastMillis);
+#endif
 
     // Re-enable ADC if it was previously running
     ADCSRA = prevADCSRA;
@@ -226,6 +238,43 @@ void sleepISR() {
   // Now we continue running the main Loop() just after we went to sleep
 }
 
+// Slowly turn up eyes in purple, move over to a red glow, kep the red glow for a while
+// and then turn down via purple
+void redGlow() {
+  uint8_t r_brgt = 0;
+  uint8_t g_brgt = 0;
+  uint8_t b_brgt = 0;
+  if (millis() > lastMillis + 1000) {
+    for(int i = 0; i < 256; i++) {
+      r_brgt = i;
+      if(i < 128) {
+        b_brgt = i;
+      } else {
+        b_brgt = 255 - i;
+      }
+      for(int led_idx = 0; led_idx < numSpookLeds; led_idx++) {
+        spookLeds[led_idx] = CRGB(g_brgt, r_brgt, b_brgt);
+      }
+      FastLED.show();
+      delay(20);
+    }
+
+    delay(6000);
+    for(int i = 255; i >= 0; i--) {
+      r_brgt = i;
+      if(i < 128) {
+        b_brgt = i;
+      } else {
+        b_brgt = 255 - i;
+      }
+      for(int led_idx = 0; led_idx < numSpookLeds; led_idx++) {
+        spookLeds[led_idx] = CRGB(g_brgt, r_brgt, b_brgt);
+      }
+      FastLED.show();
+      delay(20);
+    }
+  }
+}
 
 // Double blink green just to show we are running. Note that we do NOT
 // use the delay for final delay here, this is done by checking
