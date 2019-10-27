@@ -1,26 +1,30 @@
 /*
    Adapted from Low Power SLEEP modes for Arduino UNO/Nano
-   using Atmel328P microcontroller chip video.
+   using Atmel328P microcontroller chip video by Ralph S Bacon
 
-   For full details see my video #115
+   For full details see his videos #115, #159, #166, and all his other inspiring and insightful videos!
    at https://www.youtube.com/ralphbacon
-
-   This video is #159 to be found at the same place!
 
    All details can be found at https://github.com/ralphbacon
 
+   I've added the use of WS2812b LED's using the FastLED Arduino library:
+   https://github.com/FastLED/FastLED
+   (October 2019, Martin Bøgelund)
 */
 #include "Arduino.h"
 #include <avr/sleep.h>
+#include <FastLED.h>
 
 //                (Physical pin)
 #define wakePin 3   // (5) when rising, makes 328P wake up, must be an interrupt pin (2 or 3 on ATMEGA328P)
-#define beepPin 5    // (11) output pin for the LED (to show it is awake) PWM capable
+#define beepPin 5   // (11) output pin for the LED (to show it is awake) PWM capable
 #define ldrPIN A0   // (23) Determines light/dark state and prevent PIR from waking up unless dark
 #define pwrLDR 7    // (13) A1 used as digital out
 #define batIN A1    // (24) Used to read the battery voltage
 #define batOUT 13   // (19) Closest physical pin to A1
-//#define debug TRUE
+#define spookPin 8  // (14) Data out pin for Step Spooks LED eyes (WS2812b LED's)
+#define DEBUG TRUE
+#define numSpookLeds 2   // We daisy chain 2 WS2812b LED's for the Spooks eyes
 
 // Array of pins in use; all others get set to INPUT to reduce power
 // char pinsInUse[] = {8, 3, 5, 14, 18};
@@ -28,6 +32,7 @@
 unsigned long awakeTimeMs = 0;
 unsigned long lastMillis = 0;
 unsigned char prevPIRState = 0;
+CRGB spookLeds[numSpookLeds];
 
 void setup() {
 #ifdef DEBUG
@@ -43,8 +48,18 @@ void setup() {
   // Wake pin will be brought HIGH/LOW by PIR
   pinMode(wakePin, INPUT_PULLUP);
 
-  // Flashing LED / BEEP just to show the µController is running
-  alienBeep();
+  // Lighting Spook eyes just to show the µController is running
+  FastLED.addLeds<WS2812, spookPin, GRB>(spookLeds, numSpookLeds);
+  for(int bright = 0; bright < 256; bright++) {
+    spookLeds[0] = CRGB(bright, bright, bright);
+    spookLeds[1] = CRGB(bright, bright, bright);
+    FastLED.show();
+    delay(20);
+  }
+  delay(500);
+  spookLeds[0] = CRGB(0, 0, 0);
+  spookLeds[1] = CRGB(0, 0, 0);
+  FastLED.show();  
 
   // Power to potential divider with LDR. Ensures no power used until we read it.
   pinMode(pwrLDR, OUTPUT);
@@ -79,11 +94,11 @@ void loop() {
   // Just blink LED/beep twice to show we're running. Note that after coming out of sleep
   // there is a deliberate small delay so we don't beep immediately in case it is light
   // when this should go back to sleep at once
-  simpleBeep();
+  greenBlink();
 
   // How dark is it?
   digitalWrite(pwrLDR, HIGH);
-  delay(100);
+  delay(800);
 
   // Keep track of ambient light level - read it twice as first read is corrupted
   auto darkness = analogRead(ldrPIN);
@@ -194,7 +209,7 @@ void loop() {
 #ifdef DEBUG
       Serial.println("Battery low");
 #endif
-      alienBeep();
+      redBlink();
     }
   }
 }
@@ -212,32 +227,41 @@ void sleepISR() {
 }
 
 
-// Double blink and beep just to show we are running. Note that we do NOT
+// Double blink green just to show we are running. Note that we do NOT
 // use the delay for final delay here, this is done by checking
 // millis instead (non-blocking)
-void simpleBeep() {
+void greenBlink() {
 
   // One second must have elapased before we beep again
   if (millis() > lastMillis + 1000) {
-    tone(beepPin, 2000, 50);
-    delay(100);
-    tone(beepPin, 2500, 50);
+    for(int i = 0; i < 2; i++){
+      spookLeds[0] = CRGB(255, 0, 0);
+      spookLeds[1] = CRGB(255, 0, 0);
+      FastLED.show();
+      delay(500);
+
+      spookLeds[0] = CRGB(0, 0, 0);
+      spookLeds[1] = CRGB(0, 0, 0);
+      FastLED.show();
+      delay(500);
+    }
     lastMillis = millis();
   }
 }
 
-// Low battery warning CEotTK - d,e,c,C,G
-void alienBeep() {
-  static uint16_t tones[] = {2349, 2637, 2093, 1046, 1567};
-  static uint16_t delays[] {550, 550, 550, 575, 1200};
-  for (auto cnt = 0; cnt < 5; cnt++) {
-    tone(beepPin, tones[cnt], 1000);
-    delay(delays[cnt]);
+// Low battery warning - blink just one eye red
+void redBlink() {
+  for(int i = 0; i < 3; i++) {
+    spookLeds[0] = CRGB(0, 80, 0);
+    FastLED.show();
+    delay(1000);
+    spookLeds[0] = CRGB(0, 0, 0);
+    FastLED.show();
+    delay(1000);
   }
-  delay(250);
 
-  // If we are consuming time here reset the beeper timer in case we should be sleeping
-  lastMillis = millis() - 200;
+  // If we are consuming time here reset the blinker timer in case we should be sleeping
+  lastMillis = millis() - 600;
 }
 
 unsigned int getBatteryVolts() {
