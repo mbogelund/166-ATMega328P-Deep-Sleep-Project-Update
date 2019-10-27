@@ -92,6 +92,9 @@ void setup() {
 
 // The loop just blinks an LED when not in sleep mode
 void loop() {
+  #ifdef DEBUG
+  Serial.println("Loop section started.");
+#endif
   static int previousDark = 0;
 
   // Just blink LED/beep twice to show we're running. Note that after coming out of sleep
@@ -127,8 +130,8 @@ void loop() {
 
   // Is it light (> 400) then go to sleep at once
   // If it is dark AND it's been running for 5+ seconds AND PIR has not detected activity, go to sleep
-  if (darkness > 400
-      || (millis() > awakeTimeMs + 600
+  if (darkness > 500
+      || (millis() > awakeTimeMs + 1000
           && pirLevel == HIGH))
   {
     // Turn off the LDR power
